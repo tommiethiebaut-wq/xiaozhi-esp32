@@ -187,6 +187,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_CHD_ESP32S3_EYE
         bool "CHD ESP32-S3-EYE (虫洞)"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ESP32_S3_N16R8_CUSTOM
+        bool "Custom ESP32-S3 N16R8"
+        depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_CYBERAI_VOCAT_V2_0
         bool "Cyberai-Vocat-V2.0"
         depends on IDF_TARGET_ESP32S3
@@ -679,9 +682,7 @@ choice BOARD_TYPE
     config BOARD_TYPE_ZHENGCHEN_CAM
         bool "Zhengchen AI Camera Wi-Fi (征辰科技)"
         depends on IDF_TARGET_ESP32S3
-    config BOARD_TYPE_ESP32_S3_N16R8_CUSTOM
-        bool "Custom ESP32-S3 N16R8"
-        depends on IDF_TARGET_ESP32S3
+    
 endchoice
 
 config RESPEAKER_I2S_EXTERNAL_CLOCK_48K
