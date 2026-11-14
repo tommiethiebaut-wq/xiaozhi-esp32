@@ -960,6 +960,11 @@ elseif(CONFIG_BOARD_TYPE_LC_S3_WIFI_1_54TFT)
     set(BUILTIN_TEXT_FONT font_noto_sans_basic_20_4)
     set(BUILTIN_ICON_FONT font_material_symbols_20_4)
     set(DEFAULT_EMOJI_COLLECTION noto-color-emoji_64)
+    
+elseif(CONFIG_BOARD_TYPE_ESP32_S3_N16R8_CUSTOM)
+    set(BOARD_DIR "esp32-s3-n16r8-custom")
+    set(BUILTIN_TEXT_FONT font_noto_sans_basic_14_1)
+    set(BUILTIN_ICON_FONT font_material_symbols_14_1)
 endif()
 
 if(NOT BOARD_DIR AND NOT CMAKE_BUILD_EARLY_EXPANSION)
