@@ -5,7 +5,7 @@
 #include <driver/gpio.h>
 
 // Audio sample rates
-#define AUDIO_INPUT_SAMPLE_RATE  16000
+#define AUDIO_INPUT_SAMPLE_RATE  24000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
 // Duplex I2S - shared microphone and speaker clocks
