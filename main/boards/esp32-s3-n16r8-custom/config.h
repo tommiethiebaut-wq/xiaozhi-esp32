@@ -8,14 +8,15 @@
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 
-// Shared-clock I2S - Duplex mode
-// INMP441 microphone and MAX98357A amplifier
-#define AUDIO_I2S_GPIO_BCLK GPIO_NUM_4
+// Duplex I2S - shared microphone and speaker clocks
+// INMP441 microphone
+// MAX98357A amplifier
 #define AUDIO_I2S_GPIO_WS   GPIO_NUM_5
+#define AUDIO_I2S_GPIO_BCLK GPIO_NUM_4
 #define AUDIO_I2S_GPIO_DIN  GPIO_NUM_7
 #define AUDIO_I2S_GPIO_DOUT GPIO_NUM_6
 
-// OLED display - SSD1306, 128x64, I2C
+// OLED display - SSD1306, 128x64
 #define DISPLAY_SDA_PIN GPIO_NUM_14
 #define DISPLAY_SCL_PIN GPIO_NUM_13
 #define DISPLAY_WIDTH 128
@@ -23,7 +24,7 @@
 #define DISPLAY_MIRROR_X false
 #define DISPLAY_MIRROR_Y false
 
-// No additional buttons or onboard LED configured yet
+// No additional controls configured
 #define BUILTIN_LED_GPIO GPIO_NUM_NC
 #define BOOT_BUTTON_GPIO GPIO_NUM_NC
 #define TOUCH_BUTTON_GPIO GPIO_NUM_NC
