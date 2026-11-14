@@ -6,6 +6,7 @@
 
 #include <esp_log.h>
 #include <driver/i2c_master.h>
+#include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_panel_vendor.h>
 
@@ -38,20 +39,17 @@ private:
     }
 
     void InitializeSsd1306Display() {
-        esp_lcd_panel_io_i2c_config_t io_config = {
-            .dev_addr = 0x3C,
-            .scl_speed_hz = 400 * 1000,
-            .control_phase_bytes = 1,
-            .dc_bit_offset = 6,
-            .lcd_cmd_bits = 8,
-            .lcd_param_bits = 8,
-            .on_color_trans_done = nullptr,
-            .user_ctx = nullptr,
-            .flags = {
-                .dc_low_on_data = 0,
-                .disable_control_phase = 0,
-            },
-        };
+        esp_lcd_panel_io_i2c_config_t io_config = {};
+        io_config.dev_addr = 0x3C;
+        io_config.scl_speed_hz = 400 * 1000;
+        io_config.control_phase_bytes = 1;
+        io_config.dc_bit_offset = 6;
+        io_config.lcd_cmd_bits = 8;
+        io_config.lcd_param_bits = 8;
+        io_config.on_color_trans_done = nullptr;
+        io_config.user_ctx = nullptr;
+        io_config.flags.dc_low_on_data = 0;
+        io_config.flags.disable_control_phase = 0;
 
         ESP_ERROR_CHECK(
             esp_lcd_new_panel_io_i2c(
@@ -70,7 +68,6 @@ private:
         esp_lcd_panel_ssd1306_config_t ssd1306_config = {
             .height = static_cast<uint8_t>(DISPLAY_HEIGHT),
         };
-
         panel_config.vendor_config = &ssd1306_config;
 
         ESP_ERROR_CHECK(
@@ -89,13 +86,8 @@ private:
             return;
         }
 
-        ESP_ERROR_CHECK(
-            esp_lcd_panel_invert_color(panel_, false)
-        );
-
-        ESP_ERROR_CHECK(
-            esp_lcd_panel_disp_on_off(panel_, true)
-        );
+        ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, false));
+        ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(
             panel_io_,
