@@ -20,6 +20,44 @@ LV_FONT_DECLARE(BUILTIN_ICON_FONT);
 LV_FONT_DECLARE(font_material_symbols_30_1);
 LV_FONT_DECLARE(font_noto_emoji_30_1);
 
+namespace {
+
+// LVGL animation callbacks. Each eye is positioned relative to the 128x64 face.
+void EveSetEyeWidth(void* object, int32_t value) {
+    if (object != nullptr) lv_obj_set_width(static_cast<lv_obj_t*>(object), value);
+}
+
+void EveSetEyeHeight(void* object, int32_t value) {
+    auto* eye = static_cast<lv_obj_t*>(object);
+    if (eye == nullptr) return;
+    lv_obj_set_height(eye, value);
+    const int y = (LV_VER_RES - value) / 2;
+    lv_obj_set_y(eye, y);
+}
+
+void EveSetEyeX(void* object, int32_t value) {
+    if (object != nullptr) lv_obj_set_x(static_cast<lv_obj_t*>(object), value);
+}
+
+void EveSetEyeY(void* object, int32_t value) {
+    if (object != nullptr) lv_obj_set_y(static_cast<lv_obj_t*>(object), value);
+}
+
+void EveAnimateValue(lv_obj_t* object, int32_t start, int32_t end, uint32_t duration,
+                     lv_anim_exec_xcb_t callback) {
+    if (object == nullptr) return;
+    lv_anim_t animation;
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, object);
+    lv_anim_set_values(&animation, start, end);
+    lv_anim_set_duration(&animation, duration);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_in_out);
+    lv_anim_set_exec_cb(&animation, callback);
+    lv_anim_start(&animation);
+}
+
+}  // namespace
+
 OledDisplay::OledDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_t panel,
                          int width, int height, bool mirror_x, bool mirror_y)
     : panel_io_(panel_io), panel_(panel) {
@@ -82,19 +120,16 @@ OledDisplay::OledDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handl
         ESP_LOGE(TAG, "Failed to add display");
         return;
     }
-
-    // Note: SetupUI() should be called by Application::Initialize(), not in constructor
-    // to ensure lvgl objects are created after the display is fully initialized.
+    // SetupUI() is called by Application::Initialize() after display initialization.
 }
 
 void OledDisplay::SetupUI() {
-    // Prevent duplicate calls - if already called, return early
     if (setup_ui_called_) {
         ESP_LOGW(TAG, "SetupUI() called multiple times, skipping duplicate call");
         return;
     }
 
-    Display::SetupUI();  // Mark SetupUI as called
+    Display::SetupUI();
     if (height_ == 64) {
         SetupUI_128x64();
     } else {
@@ -103,17 +138,18 @@ void OledDisplay::SetupUI() {
 }
 
 OledDisplay::~OledDisplay() {
-    // Stop the eye animation before deinitializing LVGL.
     if (eve_blink_timer_ != nullptr) {
         lv_timer_del(eve_blink_timer_);
         eve_blink_timer_ = nullptr;
     }
-
-    if (content_ != nullptr) {
-        lv_obj_del(content_);
+    if (eve_gaze_timer_ != nullptr) {
+        lv_timer_del(eve_gaze_timer_);
+        eve_gaze_timer_ = nullptr;
     }
 
-    bool is_128x64_layout = (top_bar_ != nullptr);
+    if (content_ != nullptr) lv_obj_del(content_);
+
+    const bool is_128x64_layout = (top_bar_ != nullptr);
     if (status_bar_ != nullptr && is_128x64_layout) {
         status_label_ = nullptr;
         notification_label_ = nullptr;
@@ -135,16 +171,10 @@ OledDisplay::~OledDisplay() {
         }
         lv_obj_del(side_bar_);
     }
-    if (container_ != nullptr) {
-        lv_obj_del(container_);
-    }
+    if (container_ != nullptr) lv_obj_del(container_);
 
-    if (panel_ != nullptr) {
-        esp_lcd_panel_del(panel_);
-    }
-    if (panel_io_ != nullptr) {
-        esp_lcd_panel_io_del(panel_io_);
-    }
+    if (panel_ != nullptr) esp_lcd_panel_del(panel_);
+    if (panel_io_ != nullptr) esp_lcd_panel_io_del(panel_io_);
     lvgl_port_deinit();
 }
 
@@ -154,43 +184,33 @@ void OledDisplay::Unlock() { lvgl_port_unlock(); }
 
 void OledDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
-    if (chat_message_label_ == nullptr) {
-        return;
-    }
+    if (chat_message_label_ == nullptr) return;
 
-    // Replace all newlines with spaces
-    std::string content_str = content;
+    std::string content_str = content ? content : "";
     std::replace(content_str.begin(), content_str.end(), '\n', ' ');
 
     lv_anim_delete(chat_message_label_, nullptr);
     if (content_right_ == nullptr) {
         lv_label_set_text(chat_message_label_, content_str.c_str());
+    } else if (content_str.empty()) {
+        lv_obj_add_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
     } else {
-        if (content == nullptr || content[0] == '\0') {
-            lv_obj_add_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_label_set_text(chat_message_label_, content_str.c_str());
-            lv_obj_remove_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
-        }
+        lv_label_set_text(chat_message_label_, content_str.c_str());
+        lv_obj_remove_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
 void OledDisplay::RemoveChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
-    if (chat_message_label_ == nullptr || content == nullptr) {
-        return;
-    }
-    // OLED has one text slot and does not distinguish message roles.
+    if (chat_message_label_ == nullptr || content == nullptr) return;
+
     std::string content_str = content;
     std::replace(content_str.begin(), content_str.end(), '\n', ' ');
-    if (content_str != lv_label_get_text(chat_message_label_)) {
-        return;
-    }
+    if (content_str != lv_label_get_text(chat_message_label_)) return;
+
     lv_anim_delete(chat_message_label_, nullptr);
     lv_label_set_text(chat_message_label_, "");
-    if (content_right_ != nullptr) {
-        lv_obj_add_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
-    }
+    if (content_right_ != nullptr) lv_obj_add_flag(content_right_, LV_OBJ_FLAG_HIDDEN);
 }
 
 void OledDisplay::SetupUI_128x64() {
@@ -205,7 +225,6 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_text_font(screen, text_font, 0);
     lv_obj_set_style_text_color(screen, lv_color_black(), 0);
 
-    /* Container */
     container_ = lv_obj_create(screen);
     lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_COLUMN);
@@ -213,7 +232,6 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
 
-    /* Layer 1: Top bar - for status icons */
     top_bar_ = lv_obj_create(container_);
     lv_obj_set_size(top_bar_, LV_HOR_RES, 16);
     lv_obj_set_style_radius(top_bar_, 0, 0);
@@ -246,16 +264,15 @@ void OledDisplay::SetupUI_128x64() {
     lv_label_set_text(battery_label_, "");
     lv_obj_set_style_text_font(battery_label_, icon_font, 0);
 
-    /* Layer 2: Status bar - for center text labels */
     status_bar_ = lv_obj_create(screen);
     lv_obj_set_size(status_bar_, LV_HOR_RES, 16);
     lv_obj_set_style_radius(status_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);  // Transparent background
+    lv_obj_set_style_bg_opa(status_bar_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(status_bar_, 0, 0);
     lv_obj_set_style_pad_all(status_bar_, 0, 0);
     lv_obj_set_scrollbar_mode(status_bar_, LV_SCROLLBAR_MODE_OFF);
-    lv_obj_set_style_layout(status_bar_, LV_LAYOUT_NONE, 0);  // Use absolute positioning
-    lv_obj_align(status_bar_, LV_ALIGN_TOP_MID, 0, 0);        // Overlap with top_bar_
+    lv_obj_set_style_layout(status_bar_, LV_LAYOUT_NONE, 0);
+    lv_obj_align(status_bar_, LV_ALIGN_TOP_MID, 0, 0);
 
     notification_label_ = lv_label_create(status_bar_);
     lv_obj_set_width(notification_label_, LV_HOR_RES);
@@ -271,7 +288,6 @@ void OledDisplay::SetupUI_128x64() {
     lv_label_set_text(status_label_, Lang::Strings::INITIALIZING);
     lv_obj_align(status_label_, LV_ALIGN_CENTER, 0, 0);
 
-    /* Content */
     content_ = lv_obj_create(container_);
     lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_radius(content_, 0, 0);
@@ -306,14 +322,13 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_width(chat_message_label_, width_ - 32);
     lv_obj_set_style_pad_top(chat_message_label_, 14, 0);
 
-    // Start scrolling subtitle after a delay
-    static lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_delay(&a, 1000);
-    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-    lv_obj_set_style_anim(chat_message_label_, &a, LV_PART_MAIN);
-    lv_obj_set_style_anim_duration(chat_message_label_, lv_anim_speed_clamped(60, 300, 60000),
-                                   LV_PART_MAIN);
+    static lv_anim_t subtitle_anim;
+    lv_anim_init(&subtitle_anim);
+    lv_anim_set_delay(&subtitle_anim, 1000);
+    lv_anim_set_repeat_count(&subtitle_anim, LV_ANIM_REPEAT_INFINITE);
+    lv_obj_set_style_anim(chat_message_label_, &subtitle_anim, LV_PART_MAIN);
+    lv_obj_set_style_anim_duration(chat_message_label_,
+                                   lv_anim_speed_clamped(60, 300, 60000), LV_PART_MAIN);
 
     low_battery_popup_ = lv_obj_create(screen);
     lv_obj_set_scrollbar_mode(low_battery_popup_, LV_SCROLLBAR_MODE_OFF);
@@ -327,7 +342,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // EVE-inspired face: black background with two white oval eyes
+    // Full-screen black EVE face. Eyes are solid white.
     lv_obj_t* eve_face = lv_obj_create(screen);
     lv_obj_set_size(eve_face, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_pos(eve_face, 0, 0);
@@ -338,28 +353,34 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_radius(eve_face, 0, 0);
     lv_obj_clear_flag(eve_face, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Left eye
     eve_eye_left_ = lv_obj_create(eve_face);
-    lv_obj_set_size(eve_eye_left_, 25, 40);
-    lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27, 0);
+    lv_obj_set_size(eve_eye_left_, 25, 3);
+    lv_obj_set_pos(eve_eye_left_, 27, (LV_VER_RES - 3) / 2);
     lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
     lv_obj_set_style_radius(eve_eye_left_, LV_RADIUS_CIRCLE, 0);
     lv_obj_clear_flag(eve_eye_left_, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Right eye
     eve_eye_right_ = lv_obj_create(eve_face);
-    lv_obj_set_size(eve_eye_right_, 25, 40);
-    lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76, 0);
+    lv_obj_set_size(eve_eye_right_, 25, 3);
+    lv_obj_set_pos(eve_eye_right_, 76, (LV_VER_RES - 3) / 2);
     lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
     lv_obj_set_style_radius(eve_eye_right_, LV_RADIUS_CIRCLE, 0);
     lv_obj_clear_flag(eve_eye_right_, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Start with a natural pause before the first blink.
-    eve_blink_timer_ = lv_timer_create(EveBlinkTimerCallback, 2800, this);
+    // EVE wakes from a narrow closed-eye state, then begins natural idle motion.
+    eve_waking_up_ = true;
+    eve_eyes_closed_ = true;
+    EveAnimateValue(eve_eye_left_, 3, eve_eye_height_, 900, EveSetEyeHeight);
+    EveAnimateValue(eve_eye_right_, 3, eve_eye_height_, 900, EveSetEyeHeight);
+    EveAnimateValue(eve_eye_left_, 27, 27, 900, EveSetEyeX);
+    EveAnimateValue(eve_eye_right_, 76, 76, 900, EveSetEyeX);
+
+    eve_blink_timer_ = lv_timer_create(EveBlinkTimerCallback, 3300, this);
+    eve_gaze_timer_ = lv_timer_create(EveGazeTimerCallback, 4100, this);
 }
 
 void OledDisplay::SetupUI_128x32() {
@@ -373,7 +394,6 @@ void OledDisplay::SetupUI_128x32() {
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
 
-    /* Container */
     container_ = lv_obj_create(screen);
     lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_flex_flow(container_, LV_FLEX_FLOW_ROW);
@@ -381,7 +401,6 @@ void OledDisplay::SetupUI_128x32() {
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_column(container_, 0, 0);
 
-    /* Emotion label on the left side */
     content_ = lv_obj_create(container_);
     lv_obj_set_size(content_, 32, 32);
     lv_obj_set_style_pad_all(content_, 0, 0);
@@ -393,7 +412,6 @@ void OledDisplay::SetupUI_128x32() {
     lv_label_set_text(emotion_label_, MATERIAL_SYMBOLS_ROBOT_2);
     lv_obj_center(emotion_label_);
 
-    /* Right side */
     side_bar_ = lv_obj_create(container_);
     lv_obj_set_size(side_bar_, width_ - 32, 32);
     lv_obj_set_flex_flow(side_bar_, LV_FLEX_FLOW_COLUMN);
@@ -402,7 +420,6 @@ void OledDisplay::SetupUI_128x32() {
     lv_obj_set_style_radius(side_bar_, 0, 0);
     lv_obj_set_style_pad_row(side_bar_, 0, 0);
 
-    /* Status bar */
     status_bar_ = lv_obj_create(side_bar_);
     lv_obj_set_size(status_bar_, width_ - 32, 16);
     lv_obj_set_style_radius(status_bar_, 0, 0);
@@ -440,14 +457,13 @@ void OledDisplay::SetupUI_128x32() {
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_label_set_text(chat_message_label_, "");
 
-    // Start scrolling subtitle after a delay
-    static lv_anim_t a;
-    lv_anim_init(&a);
-    lv_anim_set_delay(&a, 1000);
-    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-    lv_obj_set_style_anim(chat_message_label_, &a, LV_PART_MAIN);
-    lv_obj_set_style_anim_duration(chat_message_label_, lv_anim_speed_clamped(60, 300, 60000),
-                                   LV_PART_MAIN);
+    static lv_anim_t subtitle_anim;
+    lv_anim_init(&subtitle_anim);
+    lv_anim_set_delay(&subtitle_anim, 1000);
+    lv_anim_set_repeat_count(&subtitle_anim, LV_ANIM_REPEAT_INFINITE);
+    lv_obj_set_style_anim(chat_message_label_, &subtitle_anim, LV_PART_MAIN);
+    lv_obj_set_style_anim_duration(chat_message_label_,
+                                   lv_anim_speed_clamped(60, 300, 60000), LV_PART_MAIN);
 }
 
 void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
@@ -457,33 +473,65 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
         return;
     }
 
-    if (!display->eve_eyes_closed_) {
-        // Close both eyes briefly, preserving the current expression and gaze.
-        display->eve_eyes_closed_ = true;
-        lv_obj_set_size(display->eve_eye_left_, display->eve_eye_width_, 3);
-        lv_obj_set_size(display->eve_eye_right_, display->eve_eye_width_, 3);
-        lv_obj_align(display->eve_eye_left_, LV_ALIGN_LEFT_MID,
-                     27 + display->eve_eye_x_, display->eve_eye_y_);
-        lv_obj_align(display->eve_eye_right_, LV_ALIGN_LEFT_MID,
-                     76 + display->eve_eye_x_, display->eve_eye_y_);
-        lv_timer_set_period(timer, 130);
-    } else {
-        // Reopen using the latest expression dimensions.
+    // Do not interrupt the initial wake-up animation.
+    if (display->eve_waking_up_) {
+        display->eve_waking_up_ = false;
         display->eve_eyes_closed_ = false;
-        lv_obj_set_size(display->eve_eye_left_, display->eve_eye_width_,
-                        display->eve_eye_height_);
-        lv_obj_set_size(display->eve_eye_right_, display->eve_eye_width_,
-                        display->eve_eye_height_);
-        lv_obj_align(display->eve_eye_left_, LV_ALIGN_LEFT_MID,
-                     27 + display->eve_eye_x_, display->eve_eye_y_);
-        lv_obj_align(display->eve_eye_right_, LV_ALIGN_LEFT_MID,
-                     76 + display->eve_eye_x_, display->eve_eye_y_);
-
-        // Vary the pause between blinks.
-        lv_timer_set_period(timer, 1900 + (lv_tick_get() % 2100));
+        lv_timer_set_period(timer, 2600);
+        lv_timer_reset(timer);
+        return;
     }
 
+    if (!display->eve_eyes_closed_) {
+        display->eve_eyes_closed_ = true;
+        lv_anim_delete(display->eve_eye_left_, EveSetEyeHeight);
+        lv_anim_delete(display->eve_eye_right_, EveSetEyeHeight);
+        EveAnimateValue(display->eve_eye_left_, display->eve_eye_height_, 3, 100,
+                        EveSetEyeHeight);
+        EveAnimateValue(display->eve_eye_right_, display->eve_eye_height_, 3, 100,
+                        EveSetEyeHeight);
+        lv_timer_set_period(timer, 150);
+    } else {
+        display->eve_eyes_closed_ = false;
+        EveAnimateValue(display->eve_eye_left_, 3, display->eve_eye_height_, 130,
+                        EveSetEyeHeight);
+        EveAnimateValue(display->eve_eye_right_, 3, display->eve_eye_height_, 130,
+                        EveSetEyeHeight);
+        lv_timer_set_period(timer, 2100 + (lv_tick_get() % 2300));
+    }
     lv_timer_reset(timer);
+}
+
+void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
+    auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
+    if (display == nullptr || display->eve_eye_left_ == nullptr ||
+        display->eve_eye_right_ == nullptr || display->eve_eyes_closed_) {
+        return;
+    }
+
+    // Small, deliberate glances rather than large robotic jumps.
+    const uint32_t phase = (lv_tick_get() / 4100) % 6;
+    static const int8_t gaze_x[] = {0, -4, 4, 0, 0, 0};
+    static const int8_t gaze_y[] = {0, 0, 0, -3, 3, 0};
+    display->eve_gaze_x_ = gaze_x[phase];
+    display->eve_gaze_y_ = gaze_y[phase];
+
+    const int left_x = 27 + display->eve_eye_x_ + display->eve_gaze_x_;
+    const int right_x = 76 + display->eve_eye_x_ + display->eve_gaze_x_;
+    const int center_y = (LV_VER_RES - display->eve_eye_height_) / 2;
+    const int target_y = center_y + display->eve_eye_y_ + display->eve_gaze_y_;
+
+    EveAnimateValue(display->eve_eye_left_, lv_obj_get_x(display->eve_eye_left_), left_x, 360,
+                    EveSetEyeX);
+    EveAnimateValue(display->eve_eye_right_, lv_obj_get_x(display->eve_eye_right_), right_x, 360,
+                    EveSetEyeX);
+    EveAnimateValue(display->eve_eye_left_, lv_obj_get_y(display->eve_eye_left_), target_y, 360,
+                    EveSetEyeY);
+    EveAnimateValue(display->eve_eye_right_, lv_obj_get_y(display->eve_eye_right_), target_y, 360,
+                    EveSetEyeY);
+
+    // Change the next glance interval slightly to avoid a mechanical rhythm.
+    lv_timer_set_period(timer, 3000 + (lv_tick_get() % 1800));
 }
 
 bool OledDisplay::SetEmotion(const char* emotion) {
@@ -497,72 +545,87 @@ bool OledDisplay::SetEmotion(const char* emotion) {
 
     DisplayLockGuard lock(this);
 
-    // EVE eye expressions
     if (eve_eye_left_ != nullptr && eve_eye_right_ != nullptr) {
         const std::string mood = emotion ? emotion : "";
 
-        // Neutral expression.
-        eve_eye_width_ = 25;
-        eve_eye_height_ = 40;
-        eve_eye_y_ = 0;
-        eve_eye_x_ = 0;
+        int target_width = 25;
+        int target_height = 40;
+        int target_y = 0;
+        int target_x = 0;
 
         if (mood == "happy" || mood == "laughing" || mood == "joy") {
-            eve_eye_width_ = 30;
-            eve_eye_height_ = 23;
-            eve_eye_y_ = 5;
+            target_width = 30;
+            target_height = 23;
+            target_y = 5;
         } else if (mood == "sad" || mood == "crying") {
-            eve_eye_height_ = 29;
-            eve_eye_y_ = 4;
+            target_height = 29;
+            target_y = 4;
         } else if (mood == "surprised" || mood == "excited") {
-            eve_eye_width_ = 22;
-            eve_eye_height_ = 48;
+            target_width = 22;
+            target_height = 48;
         } else if (mood == "angry") {
-            eve_eye_width_ = 28;
-            eve_eye_height_ = 24;
-            eve_eye_y_ = 5;
+            target_width = 28;
+            target_height = 24;
+            target_y = 5;
         } else if (mood == "sleepy" || mood == "relaxed") {
-            eve_eye_width_ = 30;
-            eve_eye_height_ = 12;
-            eve_eye_y_ = 10;
+            target_width = 30;
+            target_height = 12;
+            target_y = 10;
         } else if (mood == "sleeping") {
-            eve_eye_width_ = 30;
-            eve_eye_height_ = 3;
-            eve_eye_y_ = 10;
+            target_width = 30;
+            target_height = 3;
+            target_y = 10;
         } else if (mood == "thinking" || mood == "confused") {
-            eve_eye_x_ = 5;
-            eve_eye_height_ = 34;
+            target_x = 2;
+            target_height = 34;
         } else if (mood == "curious" || mood == "embarrassed") {
-            eve_eye_width_ = 22;
-            eve_eye_height_ = 44;
+            target_width = 22;
+            target_height = 44;
         } else if (mood == "listening") {
-            eve_eye_height_ = 43;
+            target_height = 43;
         } else if (mood == "speaking") {
-            eve_eye_width_ = 28;
-            eve_eye_height_ = 35;
+            target_width = 28;
+            target_height = 35;
         }
 
-        // If a blink is in progress, the timer will reopen using these dimensions.
+        eve_eye_width_ = target_width;
+        eve_eye_height_ = target_height;
+        eve_eye_y_ = target_y;
+        eve_eye_x_ = target_x;
+
         if (!eve_eyes_closed_) {
-            lv_obj_set_size(eve_eye_left_, eve_eye_width_, eve_eye_height_);
-            lv_obj_set_size(eve_eye_right_, eve_eye_width_, eve_eye_height_);
-            lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27 + eve_eye_x_, eve_eye_y_);
-            lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76 + eve_eye_x_, eve_eye_y_);
-        }
+            const int left_x = 27 + eve_eye_x_ + eve_gaze_x_;
+            const int right_x = 76 + eve_eye_x_ + eve_gaze_x_;
+            const int target_eye_y =
+                (LV_VER_RES - target_height) / 2 + target_y + eve_gaze_y_;
 
+            lv_anim_delete(eve_eye_left_, nullptr);
+            lv_anim_delete(eve_eye_right_, nullptr);
+
+            EveAnimateValue(eve_eye_left_, lv_obj_get_width(eve_eye_left_), target_width, 240,
+                            EveSetEyeWidth);
+            EveAnimateValue(eve_eye_right_, lv_obj_get_width(eve_eye_right_), target_width, 240,
+                            EveSetEyeWidth);
+            EveAnimateValue(eve_eye_left_, lv_obj_get_height(eve_eye_left_), target_height, 240,
+                            EveSetEyeHeight);
+            EveAnimateValue(eve_eye_right_, lv_obj_get_height(eve_eye_right_), target_height, 240,
+                            EveSetEyeHeight);
+            EveAnimateValue(eve_eye_left_, lv_obj_get_x(eve_eye_left_), left_x, 240, EveSetEyeX);
+            EveAnimateValue(eve_eye_right_, lv_obj_get_x(eve_eye_right_), right_x, 240, EveSetEyeX);
+            EveAnimateValue(eve_eye_left_, lv_obj_get_y(eve_eye_left_), target_eye_y, 240,
+                            EveSetEyeY);
+            EveAnimateValue(eve_eye_right_, lv_obj_get_y(eve_eye_right_), target_eye_y, 240,
+                            EveSetEyeY);
+        }
         return true;
     }
 
-    if (emotion_label_ == nullptr) {
-        return false;
-    }
+    if (emotion_label_ == nullptr) return false;
     if (utf8 != nullptr) {
         lv_obj_set_style_text_font(emotion_label_, emotion_font, 0);
         lv_label_set_text(emotion_label_, utf8);
         return true;
     }
-    // Neither font has a glyph for this name, so what is shown is the neutral placeholder and
-    // not the emotion that was asked for.
     lv_obj_set_style_text_font(emotion_label_, lvgl_theme->emoji_font()->font(), 0);
     lv_label_set_text(emotion_label_, NOTO_EMOJI_NEUTRAL);
     return false;
@@ -570,10 +633,8 @@ bool OledDisplay::SetEmotion(const char* emotion) {
 
 void OledDisplay::SetTheme(Theme* theme) {
     DisplayLockGuard lock(this);
-
     auto lvgl_theme = static_cast<LvglTheme*>(theme);
     auto text_font = lvgl_theme->text_font()->font();
-
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
 }
