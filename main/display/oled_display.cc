@@ -505,13 +505,55 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
     lv_timer_set_period(timer, 150);
     } else {
         display->eve_eyes_closed_ = false;
-        EveAnimateValue(display->eve_eye_left_, 3, display->eve_eye_height_, 130,
-                        EveSetEyeHeight);
-        EveAnimateValue(display->eve_eye_right_, 3, display->eve_eye_height_, 130,
-                        EveSetEyeHeight);
+
+        const int target_height = display->eve_eye_height_;
+        const int target_width = display->eve_eye_width_;
+
+        const int target_left_x =
+            27 + display->eve_eye_x_ + display->eve_gaze_x_;
+        const int target_right_x =
+            76 + display->eve_eye_x_ + display->eve_gaze_x_;
+
+        const int target_y =
+            (LV_VER_RES - target_height) / 2 +
+            display->eve_eye_y_ + display->eve_gaze_y_;
+
+        lv_anim_delete(display->eve_eye_left_, nullptr);
+        lv_anim_delete(display->eve_eye_right_, nullptr);
+
+        EveAnimateValue(display->eve_eye_left_,
+                        lv_obj_get_height(display->eve_eye_left_),
+                        target_height, 130, EveSetEyeHeight);
+
+        EveAnimateValue(display->eve_eye_right_,
+                        lv_obj_get_height(display->eve_eye_right_),
+                        target_height, 130, EveSetEyeHeight);
+
+        EveAnimateValue(display->eve_eye_left_,
+                        lv_obj_get_y(display->eve_eye_left_),
+                        target_y, 130, EveSetEyeY);
+
+        EveAnimateValue(display->eve_eye_right_,
+                        lv_obj_get_y(display->eve_eye_right_),
+                        target_y, 130, EveSetEyeY);
+
+        EveAnimateValue(display->eve_eye_left_,
+                        lv_obj_get_width(display->eve_eye_left_),
+                        target_width, 130, EveSetEyeWidth);
+
+        EveAnimateValue(display->eve_eye_right_,
+                        lv_obj_get_width(display->eve_eye_right_),
+                        target_width, 130, EveSetEyeWidth);
+
+        EveAnimateValue(display->eve_eye_left_,
+                        lv_obj_get_x(display->eve_eye_left_),
+                        target_left_x, 130, EveSetEyeX);
+
+        EveAnimateValue(display->eve_eye_right_,
+                        lv_obj_get_x(display->eve_eye_right_),
+                        target_right_x, 130, EveSetEyeX);
+
         lv_timer_set_period(timer, 2100 + (lv_tick_get() % 2300));
-    }
-    lv_timer_reset(timer);
 }
 
 void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
