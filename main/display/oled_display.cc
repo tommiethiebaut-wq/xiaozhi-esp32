@@ -501,8 +501,6 @@ bool OledDisplay::SetEmotion(const char* emotion) {
     if (emotion_label_ == nullptr) {
         return false;
     }
-
-    }
     if (utf8 != nullptr) {
         lv_obj_set_style_text_font(emotion_label_, emotion_font, 0);
         lv_label_set_text(emotion_label_, utf8);
