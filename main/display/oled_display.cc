@@ -325,7 +325,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_t* eve_face = lv_obj_create(screen);
     lv_obj_set_size(eve_face, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_pos(eve_face, 0, 0);
-    lv_obj_set_style_bg_color(eve_face, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(eve_face, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_face, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_face, 0, 0);
     lv_obj_set_style_pad_all(eve_face, 0, 0);
