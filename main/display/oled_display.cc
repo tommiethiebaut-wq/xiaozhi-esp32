@@ -320,6 +320,38 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+  
+    // EVE-inspired face: black background with two white oval eyes
+    lv_obj_t* eve_face = lv_obj_create(screen);
+    lv_obj_set_size(eve_face, LV_HOR_RES, LV_VER_RES);
+    lv_obj_set_pos(eve_face, 0, 0);
+    lv_obj_set_style_bg_color(eve_face, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(eve_face, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eve_face, 0, 0);
+    lv_obj_set_style_pad_all(eve_face, 0, 0);
+    lv_obj_set_style_radius(eve_face, 0, 0);
+    lv_obj_clear_flag(eve_face, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Left eye
+    eve_eye_left_ = lv_obj_create(eve_face);
+    lv_obj_set_size(eve_eye_left_, 25, 40);
+    lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27, 0);
+    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
+    lv_obj_set_style_radius(eve_eye_left_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_clear_flag(eve_eye_left_, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Right eye
+    eve_eye_right_ = lv_obj_create(eve_face);
+    lv_obj_set_size(eve_eye_right_, 25, 40);
+    lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76, 0);
+    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
+    lv_obj_set_style_radius(eve_eye_right_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_clear_flag(eve_eye_right_, LV_OBJ_FLAG_SCROLLABLE);
+  
 }
 
 void OledDisplay::SetupUI_128x32() {
