@@ -553,7 +553,10 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
                         lv_obj_get_x(display->eve_eye_right_),
                         target_right_x, 130, EveSetEyeX);
 
-        lv_timer_set_period(timer, 2100 + (lv_tick_get() % 2300));
+                lv_timer_set_period(timer, 2100 + (lv_tick_get() % 2300));
+    }
+
+    lv_timer_reset(timer);
 }
 
 void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
