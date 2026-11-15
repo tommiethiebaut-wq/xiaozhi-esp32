@@ -20,6 +20,9 @@ private:
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* emotion_label_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
+// EVE-inspired animated eyes
+    lv_obj_t* eve_eye_left_ = nullptr;
+    lv_obj_t* eve_eye_right_ = nullptr;
 
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
