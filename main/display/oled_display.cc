@@ -336,7 +336,7 @@ void OledDisplay::SetupUI_128x64() {
     eve_eye_left_ = lv_obj_create(eve_face);
     lv_obj_set_size(eve_eye_left_, 25, 40);
     lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27, 0);
-    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
     lv_obj_set_style_radius(eve_eye_left_, LV_RADIUS_CIRCLE, 0);
@@ -346,7 +346,7 @@ void OledDisplay::SetupUI_128x64() {
     eve_eye_right_ = lv_obj_create(eve_face);
     lv_obj_set_size(eve_eye_right_, 25, 40);
     lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76, 0);
-    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
     lv_obj_set_style_radius(eve_eye_right_, LV_RADIUS_CIRCLE, 0);
