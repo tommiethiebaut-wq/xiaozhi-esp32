@@ -481,14 +481,28 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
     }
 
     if (!display->eve_eyes_closed_) {
-        display->eve_eyes_closed_ = true;
-        lv_anim_delete(display->eve_eye_left_, EveSetEyeHeight);
-        lv_anim_delete(display->eve_eye_right_, EveSetEyeHeight);
-        EveAnimateValue(display->eve_eye_left_, display->eve_eye_height_, 3, 100,
-                        EveSetEyeHeight);
-        EveAnimateValue(display->eve_eye_right_, display->eve_eye_height_, 3, 100,
-                        EveSetEyeHeight);
-        lv_timer_set_period(timer, 150);
+    display->eve_eyes_closed_ = true;
+
+    const int left_height = lv_obj_get_height(display->eve_eye_left_);
+    const int right_height = lv_obj_get_height(display->eve_eye_right_);
+
+    const int left_y = lv_obj_get_y(display->eve_eye_left_);
+    const int right_y = lv_obj_get_y(display->eve_eye_right_);
+
+    lv_anim_delete(display->eve_eye_left_, EveSetEyeHeight);
+    lv_anim_delete(display->eve_eye_right_, EveSetEyeHeight);
+    lv_anim_delete(display->eve_eye_left_, EveSetEyeY);
+    lv_anim_delete(display->eve_eye_right_, EveSetEyeY);
+
+    EveAnimateValue(display->eve_eye_left_, left_height, 3, 100, EveSetEyeHeight);
+    EveAnimateValue(display->eve_eye_right_, right_height, 3, 100, EveSetEyeHeight);
+
+    EveAnimateValue(display->eve_eye_left_, left_y, left_y + (left_height - 3) / 2,
+                    100, EveSetEyeY);
+    EveAnimateValue(display->eve_eye_right_, right_y, right_y + (right_height - 3) / 2,
+                    100, EveSetEyeY);
+
+    lv_timer_set_period(timer, 150);
     } else {
         display->eve_eyes_closed_ = false;
         EveAnimateValue(display->eve_eye_left_, 3, display->eve_eye_height_, 130,
