@@ -31,8 +31,6 @@ void EveSetEyeHeight(void* object, int32_t value) {
     auto* eye = static_cast<lv_obj_t*>(object);
     if (eye == nullptr) return;
     lv_obj_set_height(eye, value);
-    const int y = (LV_VER_RES - value) / 2;
-    lv_obj_set_y(eye, y);
 }
 
 void EveSetEyeX(void* object, int32_t value) {
