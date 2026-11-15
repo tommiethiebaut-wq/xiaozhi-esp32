@@ -20,19 +20,25 @@ private:
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* emotion_label_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
-// EVE-inspired animated eyes
+
+    // EVE-inspired animated eyes.
     lv_obj_t* eve_eye_left_ = nullptr;
     lv_obj_t* eve_eye_right_ = nullptr;
 
-// EVE eye animation
+    // Eye animation timers and current expression/gaze state.
     lv_timer_t* eve_blink_timer_ = nullptr;
+    lv_timer_t* eve_gaze_timer_ = nullptr;
     int eve_eye_width_ = 25;
     int eve_eye_height_ = 40;
     int eve_eye_y_ = 0;
     int eve_eye_x_ = 0;
+    int eve_gaze_x_ = 0;
+    int eve_gaze_y_ = 0;
     bool eve_eyes_closed_ = false;
+    bool eve_waking_up_ = false;
 
-static void EveBlinkTimerCallback(lv_timer_t* timer);
+    static void EveBlinkTimerCallback(lv_timer_t* timer);
+    static void EveGazeTimerCallback(lv_timer_t* timer);
 
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
