@@ -103,6 +103,12 @@ void OledDisplay::SetupUI() {
 }
 
 OledDisplay::~OledDisplay() {
+    // Stop the eye animation before deinitializing LVGL.
+    if (eve_blink_timer_ != nullptr) {
+        lv_timer_del(eve_blink_timer_);
+        eve_blink_timer_ = nullptr;
+    }
+
     if (content_ != nullptr) {
         lv_obj_del(content_);
     }
@@ -320,12 +326,12 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_text_color(low_battery_label_, lv_color_white(), 0);
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-  
+
     // EVE-inspired face: black background with two white oval eyes
     lv_obj_t* eve_face = lv_obj_create(screen);
     lv_obj_set_size(eve_face, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_pos(eve_face, 0, 0);
-    lv_obj_set_style_bg_color(eve_face, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(eve_face, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(eve_face, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_face, 0, 0);
     lv_obj_set_style_pad_all(eve_face, 0, 0);
@@ -336,7 +342,7 @@ void OledDisplay::SetupUI_128x64() {
     eve_eye_left_ = lv_obj_create(eve_face);
     lv_obj_set_size(eve_eye_left_, 25, 40);
     lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27, 0);
-    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
     lv_obj_set_style_radius(eve_eye_left_, LV_RADIUS_CIRCLE, 0);
@@ -346,12 +352,14 @@ void OledDisplay::SetupUI_128x64() {
     eve_eye_right_ = lv_obj_create(eve_face);
     lv_obj_set_size(eve_eye_right_, 25, 40);
     lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76, 0);
-    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_black(), 0);
+    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
     lv_obj_set_style_radius(eve_eye_right_, LV_RADIUS_CIRCLE, 0);
     lv_obj_clear_flag(eve_eye_right_, LV_OBJ_FLAG_SCROLLABLE);
-  
+
+    // Start with a natural pause before the first blink.
+    eve_blink_timer_ = lv_timer_create(EveBlinkTimerCallback, 2800, this);
 }
 
 void OledDisplay::SetupUI_128x32() {
@@ -442,6 +450,42 @@ void OledDisplay::SetupUI_128x32() {
                                    LV_PART_MAIN);
 }
 
+void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
+    auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
+    if (display == nullptr || display->eve_eye_left_ == nullptr ||
+        display->eve_eye_right_ == nullptr) {
+        return;
+    }
+
+    if (!display->eve_eyes_closed_) {
+        // Close both eyes briefly, preserving the current expression and gaze.
+        display->eve_eyes_closed_ = true;
+        lv_obj_set_size(display->eve_eye_left_, display->eve_eye_width_, 3);
+        lv_obj_set_size(display->eve_eye_right_, display->eve_eye_width_, 3);
+        lv_obj_align(display->eve_eye_left_, LV_ALIGN_LEFT_MID,
+                     27 + display->eve_eye_x_, display->eve_eye_y_);
+        lv_obj_align(display->eve_eye_right_, LV_ALIGN_LEFT_MID,
+                     76 + display->eve_eye_x_, display->eve_eye_y_);
+        lv_timer_set_period(timer, 130);
+    } else {
+        // Reopen using the latest expression dimensions.
+        display->eve_eyes_closed_ = false;
+        lv_obj_set_size(display->eve_eye_left_, display->eve_eye_width_,
+                        display->eve_eye_height_);
+        lv_obj_set_size(display->eve_eye_right_, display->eve_eye_width_,
+                        display->eve_eye_height_);
+        lv_obj_align(display->eve_eye_left_, LV_ALIGN_LEFT_MID,
+                     27 + display->eve_eye_x_, display->eve_eye_y_);
+        lv_obj_align(display->eve_eye_right_, LV_ALIGN_LEFT_MID,
+                     76 + display->eve_eye_x_, display->eve_eye_y_);
+
+        // Vary the pause between blinks.
+        lv_timer_set_period(timer, 1900 + (lv_tick_get() % 2100));
+    }
+
+    lv_timer_reset(timer);
+}
+
 bool OledDisplay::SetEmotion(const char* emotion) {
     auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
     const char* utf8 = noto_emoji_get_utf8(emotion);
@@ -450,50 +494,61 @@ bool OledDisplay::SetEmotion(const char* emotion) {
         utf8 = material_symbols_get_utf8(emotion);
         emotion_font = lvgl_theme->large_icon_font()->font();
     }
-    
+
     DisplayLockGuard lock(this);
 
     // EVE eye expressions
     if (eve_eye_left_ != nullptr && eve_eye_right_ != nullptr) {
-        std::string mood = emotion ? emotion : "";
+        const std::string mood = emotion ? emotion : "";
 
-        int eye_width = 25;
-        int eye_height = 40;
-        int eye_y = 0;
-        int look_x = 0;
+        // Neutral expression.
+        eve_eye_width_ = 25;
+        eve_eye_height_ = 40;
+        eve_eye_y_ = 0;
+        eve_eye_x_ = 0;
 
-        if (mood == "happy") {
-            eye_width = 30;
-            eye_height = 23;
-            eye_y = 5;
-        } else if (mood == "sad") {
-            eye_width = 25;
-            eye_height = 30;
-            eye_y = 4;
-        } else if (mood == "surprised") {
-            eye_width = 22;
-            eye_height = 48;
+        if (mood == "happy" || mood == "laughing" || mood == "joy") {
+            eve_eye_width_ = 30;
+            eve_eye_height_ = 23;
+            eve_eye_y_ = 5;
+        } else if (mood == "sad" || mood == "crying") {
+            eve_eye_height_ = 29;
+            eve_eye_y_ = 4;
+        } else if (mood == "surprised" || mood == "excited") {
+            eve_eye_width_ = 22;
+            eve_eye_height_ = 48;
         } else if (mood == "angry") {
-            eye_width = 28;
-            eye_height = 24;
-            eye_y = 5;
-        } else if (mood == "sleepy") {
-            eye_width = 30;
-            eye_height = 12;
-            eye_y = 10;
-        } else if (mood == "thinking") {
-            look_x = 5;
-            eye_height = 34;
-        } else if (mood == "curious") {
-            eye_width = 22;
-            eye_height = 44;
+            eve_eye_width_ = 28;
+            eve_eye_height_ = 24;
+            eve_eye_y_ = 5;
+        } else if (mood == "sleepy" || mood == "relaxed") {
+            eve_eye_width_ = 30;
+            eve_eye_height_ = 12;
+            eve_eye_y_ = 10;
+        } else if (mood == "sleeping") {
+            eve_eye_width_ = 30;
+            eve_eye_height_ = 3;
+            eve_eye_y_ = 10;
+        } else if (mood == "thinking" || mood == "confused") {
+            eve_eye_x_ = 5;
+            eve_eye_height_ = 34;
+        } else if (mood == "curious" || mood == "embarrassed") {
+            eve_eye_width_ = 22;
+            eve_eye_height_ = 44;
+        } else if (mood == "listening") {
+            eve_eye_height_ = 43;
+        } else if (mood == "speaking") {
+            eve_eye_width_ = 28;
+            eve_eye_height_ = 35;
         }
 
-        lv_obj_set_size(eve_eye_left_, eye_width, eye_height);
-        lv_obj_set_size(eve_eye_right_, eye_width, eye_height);
-
-        lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27 + look_x, eye_y);
-        lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76 + look_x, eye_y);
+        // If a blink is in progress, the timer will reopen using these dimensions.
+        if (!eve_eyes_closed_) {
+            lv_obj_set_size(eve_eye_left_, eve_eye_width_, eve_eye_height_);
+            lv_obj_set_size(eve_eye_right_, eve_eye_width_, eve_eye_height_);
+            lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27 + eve_eye_x_, eve_eye_y_);
+            lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76 + eve_eye_x_, eve_eye_y_);
+        }
 
         return true;
     }
