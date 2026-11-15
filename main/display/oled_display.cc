@@ -450,9 +450,58 @@ bool OledDisplay::SetEmotion(const char* emotion) {
         utf8 = material_symbols_get_utf8(emotion);
         emotion_font = lvgl_theme->large_icon_font()->font();
     }
+    
     DisplayLockGuard lock(this);
+
+    // EVE eye expressions
+    if (eve_eye_left_ != nullptr && eve_eye_right_ != nullptr) {
+        std::string mood = emotion ? emotion : "";
+
+        int eye_width = 25;
+        int eye_height = 40;
+        int eye_y = 0;
+        int look_x = 0;
+
+        if (mood == "happy") {
+            eye_width = 30;
+            eye_height = 23;
+            eye_y = 5;
+        } else if (mood == "sad") {
+            eye_width = 25;
+            eye_height = 30;
+            eye_y = 4;
+        } else if (mood == "surprised") {
+            eye_width = 22;
+            eye_height = 48;
+        } else if (mood == "angry") {
+            eye_width = 28;
+            eye_height = 24;
+            eye_y = 5;
+        } else if (mood == "sleepy") {
+            eye_width = 30;
+            eye_height = 12;
+            eye_y = 10;
+        } else if (mood == "thinking") {
+            look_x = 5;
+            eye_height = 34;
+        } else if (mood == "curious") {
+            eye_width = 22;
+            eye_height = 44;
+        }
+
+        lv_obj_set_size(eve_eye_left_, eye_width, eye_height);
+        lv_obj_set_size(eve_eye_right_, eye_width, eye_height);
+
+        lv_obj_align(eve_eye_left_, LV_ALIGN_LEFT_MID, 27 + look_x, eye_y);
+        lv_obj_align(eve_eye_right_, LV_ALIGN_LEFT_MID, 76 + look_x, eye_y);
+
+        return true;
+    }
+
     if (emotion_label_ == nullptr) {
         return false;
+    }
+
     }
     if (utf8 != nullptr) {
         lv_obj_set_style_text_font(emotion_label_, emotion_font, 0);
