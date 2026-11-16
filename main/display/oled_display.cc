@@ -464,6 +464,7 @@ void OledDisplay::SetupUI_128x32() {
                                    lv_anim_speed_clamped(60, 300, 60000), LV_PART_MAIN);
 }
 
+
 void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
     auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
     if (display == nullptr || display->eve_eye_left_ == nullptr ||
@@ -480,80 +481,12 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
         return;
     }
 
-    if (!display->eve_eyes_closed_) {
-    display->eve_eyes_closed_ = true;
-
-    const int left_height = lv_obj_get_height(display->eve_eye_left_);
-    const int right_height = lv_obj_get_height(display->eve_eye_right_);
-
-    const int left_y = lv_obj_get_y(display->eve_eye_left_);
-    const int right_y = lv_obj_get_y(display->eve_eye_right_);
-
-    lv_anim_delete(display->eve_eye_left_, EveSetEyeHeight);
-    lv_anim_delete(display->eve_eye_right_, EveSetEyeHeight);
-    lv_anim_delete(display->eve_eye_left_, EveSetEyeY);
-    lv_anim_delete(display->eve_eye_right_, EveSetEyeY);
-
-    EveAnimateValue(display->eve_eye_left_, left_height, 3, 100, EveSetEyeHeight);
-    EveAnimateValue(display->eve_eye_right_, right_height, 3, 100, EveSetEyeHeight);
-
-    EveAnimateValue(display->eve_eye_left_, left_y, left_y + (left_height - 3) / 2,
-                    100, EveSetEyeY);
-    EveAnimateValue(display->eve_eye_right_, right_y, right_y + (right_height - 3) / 2,
-                    100, EveSetEyeY);
-
-    lv_timer_set_period(timer, 150);
-    } else {
+    // Stage 3: reopening has finished; allow gaze and expression animations.
+    if (display->eve_blink_reopening_) {
+        display->eve_blink_reopening_ = false;
         display->eve_eyes_closed_ = false;
 
-        const int target_height = display->eve_eye_height_;
-        const int target_width = display->eve_eye_width_;
-
-        const int target_left_x =
-            27 + display->eve_eye_x_ + display->eve_gaze_x_;
-        const int target_right_x =
-            76 + display->eve_eye_x_ + display->eve_gaze_x_;
-
-        const int target_y =
-            (LV_VER_RES - target_height) / 2 +
-            display->eve_eye_y_ + display->eve_gaze_y_;
-
-        lv_anim_delete(display->eve_eye_left_, nullptr);
-        lv_anim_delete(display->eve_eye_right_, nullptr);
-
-        EveAnimateValue(display->eve_eye_left_,
-                        lv_obj_get_height(display->eve_eye_left_),
-                        target_height, 130, EveSetEyeHeight);
-
-        EveAnimateValue(display->eve_eye_right_,
-                        lv_obj_get_height(display->eve_eye_right_),
-                        target_height, 130, EveSetEyeHeight);
-
-        EveAnimateValue(display->eve_eye_left_,
-                        lv_obj_get_y(display->eve_eye_left_),
-                        target_y, 130, EveSetEyeY);
-
-        EveAnimateValue(display->eve_eye_right_,
-                        lv_obj_get_y(display->eve_eye_right_),
-                        target_y, 130, EveSetEyeY);
-
-        EveAnimateValue(display->eve_eye_left_,
-                        lv_obj_get_width(display->eve_eye_left_),
-                        target_width, 130, EveSetEyeWidth);
-
-        EveAnimateValue(display->eve_eye_right_,
-                        lv_obj_get_width(display->eve_eye_right_),
-                        target_width, 130, EveSetEyeWidth);
-
-        EveAnimateValue(display->eve_eye_left_,
-                        lv_obj_get_x(display->eve_eye_left_),
-                        target_left_x, 130, EveSetEyeX);
-
-        EveAnimateValue(display->eve_eye_right_,
-                        lv_obj_get_x(display->eve_eye_right_),
-                        target_right_x, 130, EveSetEyeX);
-
-                        const uint32_t blink_timing = lv_tick_get();
+        const uint32_t blink_timing = lv_tick_get();
 
         if (display->eve_double_blink_pending_) {
             display->eve_double_blink_pending_ = false;
@@ -568,9 +501,89 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
                 lv_timer_set_period(timer, 2400 + (blink_timing % 2600));
             }
         }
+
+        lv_timer_reset(timer);
+        return;
     }
 
+    // Stage 1: close both eyes smoothly.
+    if (!display->eve_eyes_closed_) {
+        const int left_height = lv_obj_get_height(display->eve_eye_left_);
+        const int right_height = lv_obj_get_height(display->eve_eye_right_);
+        const int left_y = lv_obj_get_y(display->eve_eye_left_);
+        const int right_y = lv_obj_get_y(display->eve_eye_right_);
+
+        // Stop any previous animation so blinking takes control cleanly.
+        lv_anim_delete(display->eve_eye_left_, nullptr);
+        lv_anim_delete(display->eve_eye_right_, nullptr);
+
+        display->eve_eyes_closed_ = true;
+
+        EveAnimateValue(display->eve_eye_left_, left_height, 3, 100,
+                        EveSetEyeHeight);
+        EveAnimateValue(display->eve_eye_right_, right_height, 3, 100,
+                        EveSetEyeHeight);
+
+        EveAnimateValue(display->eve_eye_left_, left_y,
+                        left_y + (left_height - 3) / 2, 100, EveSetEyeY);
+        EveAnimateValue(display->eve_eye_right_, right_y,
+                        right_y + (right_height - 3) / 2, 100, EveSetEyeY);
+
+        lv_timer_set_period(timer, 150);
+        lv_timer_reset(timer);
+        return;
+    }
+
+    // Stage 2: reopen using the latest stored expression and gaze position.
+    // Keep eve_eyes_closed_ true until the reopening animation has completed.
+    const int target_height = display->eve_eye_height_;
+    const int target_width = display->eve_eye_width_;
+
+    const int target_left_x =
+        27 + display->eve_eye_x_ + display->eve_gaze_x_;
+    const int target_right_x =
+        76 + display->eve_eye_x_ + display->eve_gaze_x_;
+
+    const int target_y =
+        (LV_VER_RES - target_height) / 2 +
+        display->eve_eye_y_ + display->eve_gaze_y_;
+
+    lv_anim_delete(display->eve_eye_left_, nullptr);
+    lv_anim_delete(display->eve_eye_right_, nullptr);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_height(display->eve_eye_left_),
+                    target_height, 130, EveSetEyeHeight);
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_height(display->eve_eye_right_),
+                    target_height, 130, EveSetEyeHeight);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_y(display->eve_eye_left_),
+                    target_y, 130, EveSetEyeY);
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_y(display->eve_eye_right_),
+                    target_y, 130, EveSetEyeY);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_width(display->eve_eye_left_),
+                    target_width, 130, EveSetEyeWidth);
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_width(display->eve_eye_right_),
+                    target_width, 130, EveSetEyeWidth);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_x(display->eve_eye_left_),
+                    target_left_x, 130, EveSetEyeX);
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_x(display->eve_eye_right_),
+                    target_right_x, 130, EveSetEyeX);
+
+    display->eve_blink_reopening_ = true;
+    lv_timer_set_period(timer, 130);
     lv_timer_reset(timer);
+}
+
 }
 
 void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
