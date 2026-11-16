@@ -553,7 +553,21 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
                         lv_obj_get_x(display->eve_eye_right_),
                         target_right_x, 130, EveSetEyeX);
 
-                lv_timer_set_period(timer, 2100 + (lv_tick_get() % 2300));
+                        const uint32_t blink_timing = lv_tick_get();
+
+        if (display->eve_double_blink_pending_) {
+            display->eve_double_blink_pending_ = false;
+            lv_timer_set_period(timer, 2400 + (blink_timing % 2600));
+        } else {
+            // Occasionally schedule a quick second blink.
+            display->eve_double_blink_pending_ = (blink_timing % 7 == 0);
+
+            if (display->eve_double_blink_pending_) {
+                lv_timer_set_period(timer, 320);
+            } else {
+                lv_timer_set_period(timer, 2400 + (blink_timing % 2600));
+            }
+        }
     }
 
     lv_timer_reset(timer);
