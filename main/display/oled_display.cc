@@ -580,10 +580,13 @@ void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
         return;
     }
 
-    // Small, deliberate glances rather than large robotic jumps.
-    const uint32_t phase = (lv_tick_get() / 4100) % 6;
-    static const int8_t gaze_x[] = {0, -4, 4, 0, 0, 0};
-    static const int8_t gaze_y[] = {0, 0, 0, -3, 3, 0};
+    // A varied sequence of subtle glances with natural neutral pauses.
+    static const int8_t gaze_x[] = {0, -4, 0, 4, 0, 0, 0, 0};
+    static const int8_t gaze_y[] = {0, 0, -2, 0, 0, 2, 0, 0};
+
+    const int phase = display->eve_gaze_step_ % 8;
+    display->eve_gaze_step_ = (display->eve_gaze_step_ + 1) % 8;
+
     display->eve_gaze_x_ = gaze_x[phase];
     display->eve_gaze_y_ = gaze_y[phase];
 
@@ -592,13 +595,13 @@ void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
     const int center_y = (LV_VER_RES - display->eve_eye_height_) / 2;
     const int target_y = center_y + display->eve_eye_y_ + display->eve_gaze_y_;
 
-    EveAnimateValue(display->eve_eye_left_, lv_obj_get_x(display->eve_eye_left_), left_x, 360,
+    EveAnimateValue(display->eve_eye_left_, lv_obj_get_x(display->eve_eye_left_), left_x, 420,
                     EveSetEyeX);
-    EveAnimateValue(display->eve_eye_right_, lv_obj_get_x(display->eve_eye_right_), right_x, 360,
+    EveAnimateValue(display->eve_eye_right_, lv_obj_get_x(display->eve_eye_right_), right_x, 420,
                     EveSetEyeX);
-    EveAnimateValue(display->eve_eye_left_, lv_obj_get_y(display->eve_eye_left_), target_y, 360,
+    EveAnimateValue(display->eve_eye_left_, lv_obj_get_y(display->eve_eye_left_), target_y, 420,
                     EveSetEyeY);
-    EveAnimateValue(display->eve_eye_right_, lv_obj_get_y(display->eve_eye_right_), target_y, 360,
+    EveAnimateValue(display->eve_eye_right_, lv_obj_get_y(display->eve_eye_right_), target_y, 420,
                     EveSetEyeY);
 
     // Change the next glance interval slightly to avoid a mechanical rhythm.
