@@ -634,7 +634,7 @@ bool OledDisplay::SetEmotion(const char* emotion) {
         const std::string mood = emotion ? emotion : "";
 
                 int target_width = 25;
-        int target_height = 40;
+        int target_height = 44;
         int target_y = 0;
         int target_x = 0;
 
