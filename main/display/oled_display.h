@@ -29,7 +29,7 @@ private:
     lv_timer_t* eve_blink_timer_ = nullptr;
     lv_timer_t* eve_gaze_timer_ = nullptr;
     int eve_eye_width_ = 25;
-    int eve_eye_height_ = 40;
+    int eve_eye_height_ = 44;
     int eve_eye_y_ = 0;
     int eve_eye_x_ = 0;
     int eve_gaze_x_ = 0;
