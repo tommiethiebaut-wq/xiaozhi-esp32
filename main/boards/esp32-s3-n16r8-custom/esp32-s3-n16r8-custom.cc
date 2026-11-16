@@ -86,7 +86,7 @@ private:
             return;
         }
 
-        ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, false));
+        ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
         ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
 
         display_ = new OledDisplay(
