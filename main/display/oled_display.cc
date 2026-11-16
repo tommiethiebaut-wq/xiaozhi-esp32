@@ -584,8 +584,6 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
     lv_timer_reset(timer);
 }
 
-}
-
 void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
     auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
     if (display == nullptr || display->eve_eye_left_ == nullptr ||
