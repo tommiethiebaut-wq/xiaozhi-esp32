@@ -34,6 +34,7 @@ private:
     int eve_eye_x_ = 0;
     int eve_gaze_x_ = 0;
     int eve_gaze_y_ = 0;
+    int eve_gaze_step_ = 0;
     bool eve_eyes_closed_ = false;
     bool eve_waking_up_ = false;
     bool eve_double_blink_pending_ = false;
