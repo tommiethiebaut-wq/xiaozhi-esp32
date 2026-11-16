@@ -37,6 +37,7 @@ private:
     int eve_gaze_step_ = 0;
     bool eve_eyes_closed_ = false;
     bool eve_waking_up_ = false;
+    bool eve_blink_reopening_ = false;
     bool eve_double_blink_pending_ = false;
 
     static void EveBlinkTimerCallback(lv_timer_t* timer);
