@@ -357,7 +357,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
-    lv_obj_set_style_radius(eve_eye_left_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_radius(eve_eye_left_, 9, 0);
     lv_obj_clear_flag(eve_eye_left_, LV_OBJ_FLAG_SCROLLABLE);
 
     eve_eye_right_ = lv_obj_create(eve_face);
@@ -366,7 +366,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
-    lv_obj_set_style_radius(eve_eye_right_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_radius(eve_eye_right_, 9, 0);
     lv_obj_clear_flag(eve_eye_right_, LV_OBJ_FLAG_SCROLLABLE);
 
     // EVE wakes from a narrow closed-eye state, then begins natural idle motion.
