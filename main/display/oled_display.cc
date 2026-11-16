@@ -622,44 +622,65 @@ bool OledDisplay::SetEmotion(const char* emotion) {
     if (eve_eye_left_ != nullptr && eve_eye_right_ != nullptr) {
         const std::string mood = emotion ? emotion : "";
 
-        int target_width = 25;
+                int target_width = 25;
         int target_height = 40;
         int target_y = 0;
         int target_x = 0;
 
-        if (mood == "happy" || mood == "laughing" || mood == "joy") {
-            target_width = 30;
-            target_height = 23;
-            target_y = 5;
+        // Happy and amused: broad, softly squinted eyes.
+        if (mood == "happy" || mood == "laughing" ||
+            mood == "joy" || mood == "amused") {
+            target_width = 31;
+            target_height = 20;
+            target_y = 9;
+
+        // Sad: narrower, slightly lowered eyes.
         } else if (mood == "sad" || mood == "crying") {
-            target_height = 29;
+            target_width = 25;
+            target_height = 30;
             target_y = 4;
+
+        // Surprise and excitement: tall, open eyes.
         } else if (mood == "surprised" || mood == "excited") {
-            target_width = 22;
+            target_width = 21;
             target_height = 48;
-        } else if (mood == "angry") {
-            target_width = 28;
-            target_height = 24;
-            target_y = 5;
-        } else if (mood == "sleepy" || mood == "relaxed") {
-            target_width = 30;
-            target_height = 12;
-            target_y = 10;
+
+        // Angry and determined: wider, narrowed eyes.
+        } else if (mood == "angry" || mood == "determined") {
+            target_width = 29;
+            target_height = 21;
+            target_y = 8;
+
+        // Sleepy and bored: very relaxed, half-closed eyes.
+        } else if (mood == "sleepy" || mood == "relaxed" ||
+                   mood == "bored") {
+            target_width = 31;
+            target_height = 10;
+            target_y = 12;
+
         } else if (mood == "sleeping") {
-            target_width = 30;
+            target_width = 31;
             target_height = 3;
-            target_y = 10;
-        } else if (mood == "thinking" || mood == "confused") {
+            target_y = 12;
+
+        // Thinking and focused: slightly shifted, attentive eyes.
+        } else if (mood == "thinking" || mood == "confused" ||
+                   mood == "focused" || mood == "pondering") {
+            target_width = 23;
+            target_height = 35;
             target_x = 2;
-            target_height = 34;
+
+        // Curious: tall, alert eyes.
         } else if (mood == "curious" || mood == "embarrassed") {
             target_width = 22;
             target_height = 44;
-        } else if (mood == "listening") {
+
+        } else if (mood == "listening" || mood == "attentive") {
             target_height = 43;
+
         } else if (mood == "speaking") {
-            target_width = 28;
-            target_height = 35;
+            target_width = 29;
+            target_height = 34;
         }
 
         eve_eye_width_ = target_width;
@@ -676,19 +697,19 @@ bool OledDisplay::SetEmotion(const char* emotion) {
             lv_anim_delete(eve_eye_left_, nullptr);
             lv_anim_delete(eve_eye_right_, nullptr);
 
-            EveAnimateValue(eve_eye_left_, lv_obj_get_width(eve_eye_left_), target_width, 240,
+            EveAnimateValue(eve_eye_left_, lv_obj_get_width(eve_eye_left_), target_width, 300,
                             EveSetEyeWidth);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_width(eve_eye_right_), target_width, 240,
+            EveAnimateValue(eve_eye_right_, lv_obj_get_width(eve_eye_right_), target_width, 300,
                             EveSetEyeWidth);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_height(eve_eye_left_), target_height, 240,
+            EveAnimateValue(eve_eye_left_, lv_obj_get_height(eve_eye_left_), target_height, 300,
                             EveSetEyeHeight);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_height(eve_eye_right_), target_height, 240,
+            EveAnimateValue(eve_eye_right_, lv_obj_get_height(eve_eye_right_), target_height, 300,
                             EveSetEyeHeight);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_x(eve_eye_left_), left_x, 240, EveSetEyeX);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_x(eve_eye_right_), right_x, 240, EveSetEyeX);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_y(eve_eye_left_), target_eye_y, 240,
+            EveAnimateValue(eve_eye_left_, lv_obj_get_x(eve_eye_left_), left_x, 300, EveSetEyeX);
+            EveAnimateValue(eve_eye_right_, lv_obj_get_x(eve_eye_right_), right_x, 300, EveSetEyeX);
+            EveAnimateValue(eve_eye_left_, lv_obj_get_y(eve_eye_left_), target_eye_y, 300,
                             EveSetEyeY);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_y(eve_eye_right_), target_eye_y, 240,
+            EveAnimateValue(eve_eye_right_, lv_obj_get_y(eve_eye_right_), target_eye_y, 300,
                             EveSetEyeY);
         }
         return true;
