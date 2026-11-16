@@ -580,7 +580,7 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
                     target_right_x, 130, EveSetEyeX);
 
     display->eve_blink_reopening_ = true;
-    lv_timer_set_period(timer, 130);
+    lv_timer_set_period(timer, 150);
     lv_timer_reset(timer);
 }
 
