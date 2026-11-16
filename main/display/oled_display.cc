@@ -605,7 +605,7 @@ void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
                     EveSetEyeY);
 
     // Change the next glance interval slightly to avoid a mechanical rhythm.
-    lv_timer_set_period(timer, 3000 + (lv_tick_get() % 1800));
+    lv_timer_set_period(timer, 2800 + (lv_tick_get() % 2600));
 }
 
 bool OledDisplay::SetEmotion(const char* emotion) {
