@@ -445,6 +445,7 @@ void OledDisplay::SetupUI_128x64() {
 
     eve_blink_timer_ = lv_timer_create(EveBlinkTimerCallback, 3300, this);
     eve_gaze_timer_ = lv_timer_create(EveGazeTimerCallback, 4100, this);
+}
 
 void OledDisplay::SetupUI_128x32() {
     DisplayLockGuard lock(this);
