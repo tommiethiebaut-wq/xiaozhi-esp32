@@ -531,7 +531,6 @@ void OledDisplay::SetupUI_128x32() {
 }
 
 
-void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
    void OledDisplay::EveSetEyeWidth(void* state, int32_t value) {
     auto* eye = static_cast<EveEyeState*>(state);
     if (eye == nullptr || eye->buffer == nullptr) return;
