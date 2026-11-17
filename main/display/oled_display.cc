@@ -5,6 +5,8 @@
 #include "settings.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <string>
 
 #include <esp_err.h>
@@ -22,28 +24,63 @@ LV_FONT_DECLARE(font_noto_emoji_30_1);
 
 namespace {
 
-// LVGL animation callbacks. Each eye is positioned relative to the 128x64 face.
-void EveSetEyeWidth(void* object, int32_t value) {
-    if (object != nullptr) lv_obj_set_width(static_cast<lv_obj_t*>(object), value);
+// Fixed canvas dimensions for each eye.
+constexpr int EVE_CANVAS_WIDTH = 32;
+constexpr int EVE_CANVAS_HEIGHT = 50;
+
+// Draw a vertically elongated, softly rounded white eye on a black canvas.
+void EveRenderEye(uint16_t* buffer, int eye_width, int eye_height) {
+    if (buffer == nullptr) return;
+
+    // Start with a completely black canvas.
+    std::fill(buffer, buffer + EVE_CANVAS_WIDTH * EVE_CANVAS_HEIGHT, 0x0000);
+
+    eye_width = std::clamp(eye_width, 1, EVE_CANVAS_WIDTH);
+    eye_height = std::clamp(eye_height, 1, EVE_CANVAS_HEIGHT);
+
+    const int start_x = (EVE_CANVAS_WIDTH - eye_width) / 2;
+    const int start_y = (EVE_CANVAS_HEIGHT - eye_height) / 2;
+
+    for (int y = 0; y < eye_height; ++y) {
+        const float position = (static_cast<float>(y) + 0.5f) / eye_height;
+        const float curve = std::pow(std::sin(position * 3.14159265f), 0.35f);
+        const int half_width = std::max(
+            1, static_cast<int>((eye_width * curve) / 2.0f));
+
+        for (int x = 0; x < eye_width; ++x) {
+            const int relative_x = x - eye_width / 2;
+
+            if (std::abs(relative_x) <= half_width) {
+                const int px = start_x + x;
+                const int py = start_y + y;
+
+                if (px >= 0 && px < EVE_CANVAS_WIDTH &&
+                    py >= 0 && py < EVE_CANVAS_HEIGHT) {
+                    buffer[py * EVE_CANVAS_WIDTH + px] = 0xFFFF;
+                }
+            }
+        }
+    }
 }
 
-void EveSetEyeHeight(void* object, int32_t value) {
-    auto* eye = static_cast<lv_obj_t*>(object);
-    if (eye == nullptr) return;
-    lv_obj_set_height(eye, value);
-}
-
+// Position callbacks for the eye canvases.
 void EveSetEyeX(void* object, int32_t value) {
-    if (object != nullptr) lv_obj_set_x(static_cast<lv_obj_t*>(object), value);
+    if (object != nullptr) {
+        lv_obj_set_x(static_cast<lv_obj_t*>(object), value);
+    }
 }
 
 void EveSetEyeY(void* object, int32_t value) {
-    if (object != nullptr) lv_obj_set_y(static_cast<lv_obj_t*>(object), value);
+    if (object != nullptr) {
+        lv_obj_set_y(static_cast<lv_obj_t*>(object), value);
+    }
 }
 
-void EveAnimateValue(lv_obj_t* object, int32_t start, int32_t end, uint32_t duration,
-                     lv_anim_exec_xcb_t callback) {
+// Generic LVGL animation helper.
+void EveAnimateValue(void* object, int32_t start, int32_t end,
+                     uint32_t duration, lv_anim_exec_xcb_t callback) {
     if (object == nullptr) return;
+
     lv_anim_t animation;
     lv_anim_init(&animation);
     lv_anim_set_var(&animation, object);
@@ -340,7 +377,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_center(low_battery_label_);
     lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
 
-    // Full-screen black EVE face. Eyes are solid white.
+        // Full-screen black EVE face.
     lv_obj_t* eve_face = lv_obj_create(screen);
     lv_obj_set_size(eve_face, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_pos(eve_face, 0, 0);
@@ -351,35 +388,63 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_radius(eve_face, 0, 0);
     lv_obj_clear_flag(eve_face, LV_OBJ_FLAG_SCROLLABLE);
 
-    eve_eye_left_ = lv_obj_create(eve_face);
-    lv_obj_set_size(eve_eye_left_, 25, 3);
-    lv_obj_set_pos(eve_eye_left_, 27, (LV_VER_RES - 3) / 2);
-    lv_obj_set_style_bg_color(eve_eye_left_, lv_color_white(), 0);
-    lv_obj_set_style_bg_opa(eve_eye_left_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(eve_eye_left_, 0, 0);
-    lv_obj_set_style_radius(eve_eye_left_, 9, 0);
-    lv_obj_clear_flag(eve_eye_left_, LV_OBJ_FLAG_SCROLLABLE);
+    // Separate RGB565 drawing buffers for the two eyes.
+    static uint16_t eve_left_buffer[EVE_CANVAS_WIDTH * EVE_CANVAS_HEIGHT];
+    static uint16_t eve_right_buffer[EVE_CANVAS_WIDTH * EVE_CANVAS_HEIGHT];
 
-    eve_eye_right_ = lv_obj_create(eve_face);
-    lv_obj_set_size(eve_eye_right_, 25, 3);
-    lv_obj_set_pos(eve_eye_right_, 76, (LV_VER_RES - 3) / 2);
-    lv_obj_set_style_bg_color(eve_eye_right_, lv_color_white(), 0);
-    lv_obj_set_style_bg_opa(eve_eye_right_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(eve_eye_right_, 0, 0);
-    lv_obj_set_style_radius(eve_eye_right_, 9, 0);
-    lv_obj_clear_flag(eve_eye_right_, LV_OBJ_FLAG_SCROLLABLE);
+    eve_left_state_.buffer = eve_left_buffer;
+    eve_right_state_.buffer = eve_right_buffer;
 
-    // EVE wakes from a narrow closed-eye state, then begins natural idle motion.
+    eve_left_state_.width = 25;
+    eve_left_state_.height = 3;
+    eve_right_state_.width = 25;
+    eve_right_state_.height = 3;
+
+    // Create the left eye canvas.
+    eve_eye_left_ = lv_canvas_create(eve_face);
+    eve_left_state_.canvas = eve_eye_left_;
+
+    lv_canvas_set_buffer(
+        eve_eye_left_,
+        eve_left_state_.buffer,
+        EVE_CANVAS_WIDTH,
+        EVE_CANVAS_HEIGHT,
+        LV_COLOR_FORMAT_RGB565
+    );
+
+    lv_obj_set_size(eve_eye_left_, EVE_CANVAS_WIDTH, EVE_CANVAS_HEIGHT);
+    lv_obj_set_pos(eve_eye_left_, 24, 7);
+    EveRenderEye(eve_left_state_.buffer, eve_left_state_.width,
+                 eve_left_state_.height);
+
+    // Create the right eye canvas.
+    eve_eye_right_ = lv_canvas_create(eve_face);
+    eve_right_state_.canvas = eve_eye_right_;
+
+    lv_canvas_set_buffer(
+        eve_eye_right_,
+        eve_right_state_.buffer,
+        EVE_CANVAS_WIDTH,
+        EVE_CANVAS_HEIGHT,
+        LV_COLOR_FORMAT_RGB565
+    );
+
+    lv_obj_set_size(eve_eye_right_, EVE_CANVAS_WIDTH, EVE_CANVAS_HEIGHT);
+    lv_obj_set_pos(eve_eye_right_, 73, 7);
+    EveRenderEye(eve_right_state_.buffer, eve_right_state_.width,
+                 eve_right_state_.height);
+
+    // Start with closed eyes, then smoothly open them.
     eve_waking_up_ = true;
     eve_eyes_closed_ = true;
-    EveAnimateValue(eve_eye_left_, 3, eve_eye_height_, 900, EveSetEyeHeight);
-    EveAnimateValue(eve_eye_right_, 3, eve_eye_height_, 900, EveSetEyeHeight);
-    EveAnimateValue(eve_eye_left_, 27, 27, 900, EveSetEyeX);
-    EveAnimateValue(eve_eye_right_, 76, 76, 900, EveSetEyeX);
+
+    EveAnimateValue(&eve_left_state_, 3, eve_eye_height_, 900,
+                    EveSetEyeHeight);
+    EveAnimateValue(&eve_right_state_, 3, eve_eye_height_, 900,
+                    EveSetEyeHeight);
 
     eve_blink_timer_ = lv_timer_create(EveBlinkTimerCallback, 3300, this);
     eve_gaze_timer_ = lv_timer_create(EveGazeTimerCallback, 4100, this);
-}
 
 void OledDisplay::SetupUI_128x32() {
     DisplayLockGuard lock(this);
@@ -466,13 +531,32 @@ void OledDisplay::SetupUI_128x32() {
 
 
 void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
+   void OledDisplay::EveSetEyeWidth(void* state, int32_t value) {
+    auto* eye = static_cast<EveEyeState*>(state);
+    if (eye == nullptr || eye->buffer == nullptr) return;
+
+    eye->width = std::clamp(static_cast<int>(value), 1, 32);
+    EveRenderEye(eye->buffer, eye->width, eye->height);
+    if (eye->canvas != nullptr) lv_obj_invalidate(eye->canvas);
+}
+
+void OledDisplay::EveSetEyeHeight(void* state, int32_t value) {
+    auto* eye = static_cast<EveEyeState*>(state);
+    if (eye == nullptr || eye->buffer == nullptr) return;
+
+    eye->height = std::clamp(static_cast<int>(value), 1, 50);
+    EveRenderEye(eye->buffer, eye->width, eye->height);
+    if (eye->canvas != nullptr) lv_obj_invalidate(eye->canvas);
+}
+
+void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
     auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
+
     if (display == nullptr || display->eve_eye_left_ == nullptr ||
         display->eve_eye_right_ == nullptr) {
         return;
     }
 
-    // Do not interrupt the initial wake-up animation.
     if (display->eve_waking_up_) {
         display->eve_waking_up_ = false;
         display->eve_eyes_closed_ = false;
@@ -481,103 +565,92 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
         return;
     }
 
-    // Stage 3: reopening has finished; allow gaze and expression animations.
     if (display->eve_blink_reopening_) {
         display->eve_blink_reopening_ = false;
         display->eve_eyes_closed_ = false;
 
-        const uint32_t blink_timing = lv_tick_get();
+        const uint32_t timing = lv_tick_get();
 
         if (display->eve_double_blink_pending_) {
             display->eve_double_blink_pending_ = false;
-            lv_timer_set_period(timer, 2400 + (blink_timing % 2600));
+            lv_timer_set_period(timer, 2400 + (timing % 2600));
         } else {
-            // Occasionally schedule a quick second blink.
-            display->eve_double_blink_pending_ = (blink_timing % 7 == 0);
-
-            if (display->eve_double_blink_pending_) {
-                lv_timer_set_period(timer, 320);
-            } else {
-                lv_timer_set_period(timer, 2400 + (blink_timing % 2600));
-            }
+            display->eve_double_blink_pending_ = (timing % 7 == 0);
+            lv_timer_set_period(
+                timer,
+                display->eve_double_blink_pending_ ? 320 : 2400 + (timing % 2600));
         }
 
         lv_timer_reset(timer);
         return;
     }
 
-    // Stage 1: close both eyes smoothly.
+    // Close both eyes.
     if (!display->eve_eyes_closed_) {
-        const int left_height = lv_obj_get_height(display->eve_eye_left_);
-        const int right_height = lv_obj_get_height(display->eve_eye_right_);
-        const int left_y = lv_obj_get_y(display->eve_eye_left_);
-        const int right_y = lv_obj_get_y(display->eve_eye_right_);
-
-        // Stop any previous animation so blinking takes control cleanly.
-        lv_anim_delete(display->eve_eye_left_, nullptr);
-        lv_anim_delete(display->eve_eye_right_, nullptr);
+        lv_anim_delete(&display->eve_left_state_, nullptr);
+        lv_anim_delete(&display->eve_right_state_, nullptr);
 
         display->eve_eyes_closed_ = true;
 
-        EveAnimateValue(display->eve_eye_left_, left_height, 3, 100,
-                        EveSetEyeHeight);
-        EveAnimateValue(display->eve_eye_right_, right_height, 3, 100,
+        EveAnimateValue(&display->eve_left_state_,
+                        display->eve_left_state_.height, 3, 100,
                         EveSetEyeHeight);
 
-        EveAnimateValue(display->eve_eye_left_, left_y,
-                        left_y + (left_height - 3) / 2, 100, EveSetEyeY);
-        EveAnimateValue(display->eve_eye_right_, right_y,
-                        right_y + (right_height - 3) / 2, 100, EveSetEyeY);
+        EveAnimateValue(&display->eve_right_state_,
+                        display->eve_right_state_.height, 3, 100,
+                        EveSetEyeHeight);
 
         lv_timer_set_period(timer, 150);
         lv_timer_reset(timer);
         return;
     }
 
-    // Stage 2: reopen using the latest stored expression and gaze position.
-    // Keep eve_eyes_closed_ true until the reopening animation has completed.
-    const int target_height = display->eve_eye_height_;
-    const int target_width = display->eve_eye_width_;
-
+    // Reopen both eyes using the latest expression.
     const int target_left_x =
-        27 + display->eve_eye_x_ + display->eve_gaze_x_;
+        24 + display->eve_eye_x_ + display->eve_gaze_x_;
+
     const int target_right_x =
-        76 + display->eve_eye_x_ + display->eve_gaze_x_;
+        73 + display->eve_eye_x_ + display->eve_gaze_x_;
 
     const int target_y =
-        (LV_VER_RES - target_height) / 2 +
-        display->eve_eye_y_ + display->eve_gaze_y_;
+        7 + display->eve_eye_y_ + display->eve_gaze_y_;
 
+    lv_anim_delete(&display->eve_left_state_, nullptr);
+    lv_anim_delete(&display->eve_right_state_, nullptr);
     lv_anim_delete(display->eve_eye_left_, nullptr);
     lv_anim_delete(display->eve_eye_right_, nullptr);
 
-    EveAnimateValue(display->eve_eye_left_,
-                    lv_obj_get_height(display->eve_eye_left_),
-                    target_height, 130, EveSetEyeHeight);
-    EveAnimateValue(display->eve_eye_right_,
-                    lv_obj_get_height(display->eve_eye_right_),
-                    target_height, 130, EveSetEyeHeight);
+    EveAnimateValue(&display->eve_left_state_,
+                    display->eve_left_state_.height,
+                    display->eve_eye_height_, 130, EveSetEyeHeight);
 
-    EveAnimateValue(display->eve_eye_left_,
-                    lv_obj_get_y(display->eve_eye_left_),
-                    target_y, 130, EveSetEyeY);
-    EveAnimateValue(display->eve_eye_right_,
-                    lv_obj_get_y(display->eve_eye_right_),
-                    target_y, 130, EveSetEyeY);
+    EveAnimateValue(&display->eve_right_state_,
+                    display->eve_right_state_.height,
+                    display->eve_eye_height_, 130, EveSetEyeHeight);
 
-    EveAnimateValue(display->eve_eye_left_,
-                    lv_obj_get_width(display->eve_eye_left_),
-                    target_width, 130, EveSetEyeWidth);
-    EveAnimateValue(display->eve_eye_right_,
-                    lv_obj_get_width(display->eve_eye_right_),
-                    target_width, 130, EveSetEyeWidth);
+    EveAnimateValue(&display->eve_left_state_,
+                    display->eve_left_state_.width,
+                    display->eve_eye_width_, 130, EveSetEyeWidth);
+
+    EveAnimateValue(&display->eve_right_state_,
+                    display->eve_right_state_.width,
+                    display->eve_eye_width_, 130, EveSetEyeWidth);
 
     EveAnimateValue(display->eve_eye_left_,
                     lv_obj_get_x(display->eve_eye_left_),
                     target_left_x, 130, EveSetEyeX);
+
     EveAnimateValue(display->eve_eye_right_,
                     lv_obj_get_x(display->eve_eye_right_),
                     target_right_x, 130, EveSetEyeX);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_y(display->eve_eye_left_),
+                    target_y, 130, EveSetEyeY);
+
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_y(display->eve_eye_right_),
+                    target_y, 130, EveSetEyeY);
 
     display->eve_blink_reopening_ = true;
     lv_timer_set_period(timer, 150);
@@ -586,12 +659,12 @@ void OledDisplay::EveBlinkTimerCallback(lv_timer_t* timer) {
 
 void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
     auto* display = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
+
     if (display == nullptr || display->eve_eye_left_ == nullptr ||
         display->eve_eye_right_ == nullptr || display->eve_eyes_closed_) {
         return;
     }
 
-    // A varied sequence of subtle glances with natural neutral pauses.
     static const int8_t gaze_x[] = {0, -4, 0, 4, 0, 0, 0, 0};
     static const int8_t gaze_y[] = {0, 0, -2, 0, 0, 2, 0, 0};
 
@@ -601,21 +674,31 @@ void OledDisplay::EveGazeTimerCallback(lv_timer_t* timer) {
     display->eve_gaze_x_ = gaze_x[phase];
     display->eve_gaze_y_ = gaze_y[phase];
 
-    const int left_x = 27 + display->eve_eye_x_ + display->eve_gaze_x_;
-    const int right_x = 76 + display->eve_eye_x_ + display->eve_gaze_x_;
-    const int center_y = (LV_VER_RES - display->eve_eye_height_) / 2;
-    const int target_y = center_y + display->eve_eye_y_ + display->eve_gaze_y_;
+    const int left_x =
+        24 + display->eve_eye_x_ + display->eve_gaze_x_;
 
-    EveAnimateValue(display->eve_eye_left_, lv_obj_get_x(display->eve_eye_left_), left_x, 420,
-                    EveSetEyeX);
-    EveAnimateValue(display->eve_eye_right_, lv_obj_get_x(display->eve_eye_right_), right_x, 420,
-                    EveSetEyeX);
-    EveAnimateValue(display->eve_eye_left_, lv_obj_get_y(display->eve_eye_left_), target_y, 420,
-                    EveSetEyeY);
-    EveAnimateValue(display->eve_eye_right_, lv_obj_get_y(display->eve_eye_right_), target_y, 420,
-                    EveSetEyeY);
+    const int right_x =
+        73 + display->eve_eye_x_ + display->eve_gaze_x_;
 
-    // Change the next glance interval slightly to avoid a mechanical rhythm.
+    const int target_y =
+        7 + display->eve_eye_y_ + display->eve_gaze_y_;
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_x(display->eve_eye_left_),
+                    left_x, 420, EveSetEyeX);
+
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_x(display->eve_eye_right_),
+                    right_x, 420, EveSetEyeX);
+
+    EveAnimateValue(display->eve_eye_left_,
+                    lv_obj_get_y(display->eve_eye_left_),
+                    target_y, 420, EveSetEyeY);
+
+    EveAnimateValue(display->eve_eye_right_,
+                    lv_obj_get_y(display->eve_eye_right_),
+                    target_y, 420, EveSetEyeY);
+
     lv_timer_set_period(timer, 2800 + (lv_tick_get() % 2600));
 }
 
@@ -699,29 +782,55 @@ bool OledDisplay::SetEmotion(const char* emotion) {
         eve_eye_y_ = target_y;
         eve_eye_x_ = target_x;
 
-        if (!eve_eyes_closed_) {
-            const int left_x = 27 + eve_eye_x_ + eve_gaze_x_;
-            const int right_x = 76 + eve_eye_x_ + eve_gaze_x_;
-            const int target_eye_y =
-                (LV_VER_RES - target_height) / 2 + target_y + eve_gaze_y_;
+               if (!eve_eyes_closed_) {
+            const int left_x =
+                24 + eve_eye_x_ + eve_gaze_x_;
 
+            const int right_x =
+                73 + eve_eye_x_ + eve_gaze_x_;
+
+            const int target_eye_y =
+                7 + eve_eye_y_ + eve_gaze_y_;
+
+            // Stop previous animations before applying the new expression.
+            lv_anim_delete(&eve_left_state_, nullptr);
+            lv_anim_delete(&eve_right_state_, nullptr);
             lv_anim_delete(eve_eye_left_, nullptr);
             lv_anim_delete(eve_eye_right_, nullptr);
 
-            EveAnimateValue(eve_eye_left_, lv_obj_get_width(eve_eye_left_), target_width, 300,
-                            EveSetEyeWidth);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_width(eve_eye_right_), target_width, 300,
-                            EveSetEyeWidth);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_height(eve_eye_left_), target_height, 300,
-                            EveSetEyeHeight);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_height(eve_eye_right_), target_height, 300,
-                            EveSetEyeHeight);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_x(eve_eye_left_), left_x, 300, EveSetEyeX);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_x(eve_eye_right_), right_x, 300, EveSetEyeX);
-            EveAnimateValue(eve_eye_left_, lv_obj_get_y(eve_eye_left_), target_eye_y, 300,
-                            EveSetEyeY);
-            EveAnimateValue(eve_eye_right_, lv_obj_get_y(eve_eye_right_), target_eye_y, 300,
-                            EveSetEyeY);
+            // Animate the actual eye shapes.
+            EveAnimateValue(&eve_left_state_,
+                            eve_left_state_.width,
+                            target_width, 300, EveSetEyeWidth);
+
+            EveAnimateValue(&eve_right_state_,
+                            eve_right_state_.width,
+                            target_width, 300, EveSetEyeWidth);
+
+            EveAnimateValue(&eve_left_state_,
+                            eve_left_state_.height,
+                            target_height, 300, EveSetEyeHeight);
+
+            EveAnimateValue(&eve_right_state_,
+                            eve_right_state_.height,
+                            target_height, 300, EveSetEyeHeight);
+
+            // Move the eye canvases for gaze and expression positioning.
+            EveAnimateValue(eve_eye_left_,
+                            lv_obj_get_x(eve_eye_left_),
+                            left_x, 300, EveSetEyeX);
+
+            EveAnimateValue(eve_eye_right_,
+                            lv_obj_get_x(eve_eye_right_),
+                            right_x, 300, EveSetEyeX);
+
+            EveAnimateValue(eve_eye_left_,
+                            lv_obj_get_y(eve_eye_left_),
+                            target_eye_y, 300, EveSetEyeY);
+
+            EveAnimateValue(eve_eye_right_,
+                            lv_obj_get_y(eve_eye_right_),
+                            target_eye_y, 300, EveSetEyeY);
         }
         return true;
     }
