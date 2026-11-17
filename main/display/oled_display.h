@@ -21,13 +21,24 @@ private:
     lv_obj_t* emotion_label_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
 
-    // EVE-inspired animated eyes.
+    // Custom EVE eye rendering.
+    struct EveEyeState {
+        lv_obj_t* canvas = nullptr;
+        uint16_t* buffer = nullptr;
+        int width = 25;
+        int height = 44;
+    };
+
+    EveEyeState eve_left_state_;
+    EveEyeState eve_right_state_;
+
     lv_obj_t* eve_eye_left_ = nullptr;
     lv_obj_t* eve_eye_right_ = nullptr;
 
     // Eye animation timers and current expression/gaze state.
     lv_timer_t* eve_blink_timer_ = nullptr;
     lv_timer_t* eve_gaze_timer_ = nullptr;
+
     int eve_eye_width_ = 25;
     int eve_eye_height_ = 44;
     int eve_eye_y_ = 0;
@@ -35,6 +46,7 @@ private:
     int eve_gaze_x_ = 0;
     int eve_gaze_y_ = 0;
     int eve_gaze_step_ = 0;
+
     bool eve_eyes_closed_ = false;
     bool eve_waking_up_ = false;
     bool eve_blink_reopening_ = false;
@@ -42,6 +54,8 @@ private:
 
     static void EveBlinkTimerCallback(lv_timer_t* timer);
     static void EveGazeTimerCallback(lv_timer_t* timer);
+    static void EveSetEyeWidth(void* state, int32_t value);
+    static void EveSetEyeHeight(void* state, int32_t value);
 
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
